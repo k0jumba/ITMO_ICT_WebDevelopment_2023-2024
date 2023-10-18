@@ -1,3 +1,4 @@
+import threading
 import socket
 from http_request import HTTPRequest
 from http_response import HTTPResponse
@@ -7,6 +8,7 @@ class MyHTTPServer:
 		self._host = host
 		self._port = port
 		self._server_name = server_name
+		self.grades = {}
 
 	def serve_forever(self):
 		# Create a server socket and put in into listening mode
@@ -19,12 +21,14 @@ class MyHTTPServer:
 			# Accept a client connection
 			conn, addr = serv_sock.accept()
 
+			print(f"New client: {addr}")
+
 			# Serve the client
-			self.serve_client(conn)
+			threading.Thread(target=self.serve_client, args=[conn, addr]).start()
 
 		serv_sock.close()
 
-	def serve_client(self, conn):
+	def serve_client(self, conn, addr):
 		# Recieve a raw text of client's request
 		raw_request = self.recieve_raw_request(conn)
 
@@ -43,6 +47,8 @@ class MyHTTPServer:
 
 		# Close the connection
 		conn.close()
+
+		print(f"Client {addr} served!")
 
 	def recieve_raw_request(self, conn):
 		# Recieve the request text
@@ -129,9 +135,12 @@ class MyHTTPServer:
 		return HTTPResponse(405, "Method Not Allowed", {"Allow": "GET, POST"})
 
 	def handle_get_request(self, request):
-		with open("Lab1\Task5\grades.html", "r") as grades_file:
-			body = grades_file.read()
-			return HTTPResponse(200, "OK", request.headers, body)
+		import grades_generator
+
+		# Generate a page with the table
+		body = grades_generator.generate(self.grades)
+
+		return HTTPResponse(200, "OK", request.headers, body)
 
 	def handle_post_request(self, request):
 		import re
@@ -143,18 +152,13 @@ class MyHTTPServer:
 		# Parse the values provided by the user
 		discipline, grade = map(lambda statement: statement.split("=")[1], request.body.split("&"))
 
-		# Open grades.html and read its contents
-		with open("Lab1\Task5\grades.html", "r") as read_grades_file:
-			html_content = read_grades_file.read()
-
-		# Find the end of the table
-		end_table_index = html_content.rfind("</tbody>")
-
-		# Rewrite the file with appended data
-		with open("Lab1\Task5\grades.html", "w") as write_grades_file:
-			new_row = f"  <tr><td>{discipline}</td><td>{grade}</td></tr>\n\t"
-			modified_html = html_content[:end_table_index] + new_row + html_content[end_table_index:]
-			write_grades_file.write(modified_html)
+		# If discipline is already present in the table
+		# append a new grade to the corresponding entry
+		# Otherwise create a new entry
+		if discipline in self.grades:
+			self.grades[discipline].append(grade)
+		else:
+			self.grades[discipline] = [grade]
 
 		return HTTPResponse(201, "CREATED", request.headers)
 
