@@ -1,0 +1,4 @@
+site_name: My Docs
+markdown_extensions:
+    - codehilite
+site_encoding: windows-1251
